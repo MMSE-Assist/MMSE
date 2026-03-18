@@ -18,7 +18,11 @@ class Conclusion(BaseModel):
 class FollowUp(BaseModel):
     message: str = Field(description="You have to use this channel to speak to the user. It should never be empty! If you cannot proceed, explain why!", default="")
     conclusion: Conclusion = Field(
-        description=("When all questions have been asked and answered, share your final score and reasoning here"),
+        description=(
+            "Track your progress after every turn. "
+            "Set status='NOT_PROCESSED' while the section is still in progress. "
+            "Set status='FINISHED' only when all questions are done — and in that case you MUST fill in score and reasoning."
+        ),
         default_factory=lambda: Conclusion()
     )
 
@@ -37,11 +41,11 @@ class BasicAgent:
 
     def invoke(self, state: BaseModel, config: RunnableConfig):
         answer = self.agent.invoke({'messages': state['messages']}, config)
-        conclusion: Conclusion = answer['structured_response'].conclusion
-        # Set status if not set yet
-        if conclusion.status == 'NOT_PROCESSED':
-            conclusion.status = 'PROCESSING'
-        elif conclusion.status == 'PROCESSING' and conclusion.score != -1:
-            conclusion.status = "FINISHED"
-        messages = AIMessage(content=answer['structured_response'].message)
+        structured_response: FollowUp = answer['structured_response']
+        conclusion = structured_response.conclusion
+        messages = AIMessage(content=structured_response.message)
+        # In case of the conclusion, exit gracefully
+        if conclusion.status == 'FINISHED' and not conclusion.reasoning:
+            conclusion.reasoning = structured_response.message
+            messages = AIMessage(content="Thank you! Are you ready for the next section?")
         return {'agents': {self.agent.name: conclusion}, 'messages': messages}

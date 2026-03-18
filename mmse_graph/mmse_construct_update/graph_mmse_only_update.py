@@ -5,19 +5,14 @@ from dotenv import load_dotenv
 import os
 import logging
 
-# Add State dependencies
-from pydantic import BaseModel
-
-# Add Basic agent
+# Import graph resources
+from .state_definition import State
 from .mmse_intake_agent import IntakeAgent
 from .mmse_basic_agent import BasicAgent, Conclusion
 
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_neo4j import Neo4jSaver
 from neo4j import GraphDatabase
-from langchain.agents import create_agent
-from langchain.agents.middleware import ToolRetryMiddleware
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph, START
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -27,7 +22,7 @@ from langfuse.langchain import CallbackHandler
 import sys 
 
 
-from .state_definition import State
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -83,13 +78,6 @@ def load_env_variables():
         'neo4j_password': neo4j_password,
     }
 
-########################
-### Define the tools ###
-########################
-
-#@tool
-#def print_gathered_patient_info():
-#    pass
 
 def get_agents_with_types_and_schema() -> list:
     agents = [
@@ -121,16 +109,12 @@ def create_mmse_graph():
     # Open a langfuse connection
     langfuse = get_client()
     langfuse_handler = CallbackHandler()
-    
-    # Get langfuse prompts
-    #agent_prompts = langfuse.get_prompt(env_config['langfuse_prompt_name']).prompt
-    #logging.info(f"{agent_prompts[0]['content']}")
 
     # Create a fresh StateGraph builder
     builder = StateGraph(State)
     
     # FROM intake to sub agents
-    intakeAgent = IntakeAgent(assistant_llm, sub_name_and_output_list=get_agents_with_types_and_schema())
+    intakeAgent = IntakeAgent(assistant_llm, sub_name_and_output_list=get_agents_with_types_and_schema(), tracer=[langfuse_handler])
     builder.add_node(intakeAgent.state_name, intakeAgent.init_state)
     builder.add_edge(START, intakeAgent.state_name)
     builder.add_node(intakeAgent.name, intakeAgent.invoke)

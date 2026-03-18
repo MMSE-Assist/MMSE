@@ -15,7 +15,7 @@ class StartTest(BaseModel):
     patient_test_readiness: bool = Field(description="Readiness of the user to start the test", default=False)
 
 class IntakeAgent:
-    def __init__(self, model: BaseChatModel, middleware: list = [], sub_name_and_output_list: list = []):
+    def __init__(self, model: BaseChatModel, middleware: list = [], sub_name_and_output_list: list = [], tracer: list = []):
         self.state_name = "init_state"
         self.name = "intake"
         self.agent = create_agent(
@@ -27,6 +27,7 @@ class IntakeAgent:
             response_format=StartTest
         )
         self.subagents = sub_name_and_output_list
+        self.tracer = tracer
 
 
     def switcher(self, state: State) -> str:
@@ -39,7 +40,12 @@ class IntakeAgent:
                 return agent_name
         return END
             
-    def init_state(self, state: State) -> dict | State:
+    def init_state(self, state: State, config: RunnableConfig) -> dict | State:
+        # Set tracer if exist
+        if self.tracer:
+            config['callbacks'] = self.tracer
+
+        # Proceed with setting up the rest
         if not state['agents']:
             return {
                 'agents': {name: output_format() for name, _, output_format in self.subagents},

@@ -6,25 +6,53 @@ from langchain_core.runnables import RunnableConfig
 from langchain.messages import AIMessage
 from .local_system_prompt.load import load
 
+from .state_definition import State
+from langgraph.graph import END
 
-class StartTest:
-    pass
 
-class BasicAgent:
-    def __init__(self, name: str, model: BaseChatModel, middleware: list = [], future_state = BaseModel):
-        # Fetch system prompt
-        
+class StartTest(BaseModel):
+    message: str = Field(description="You have to use this channel to speak to the user. It should never be empty! If you cannot proceed, explain why!", default="")
+    patient_test_readiness: bool = Field(description="Readiness of the user to start the test", default=False)
+
+class IntakeAgent:
+    def __init__(self, model: BaseChatModel, middleware: list = [], sub_name_and_output_list: list = []):
+        self.state_name = "init_state"
+        self.name = "intake"
         self.agent = create_agent(
-            name=name,
+            name=self.name,
             model=model,
             tools=[],
-            system_prompt=load(name),
+            system_prompt=load(self.name),
             middleware=[],
             response_format=StartTest
         )
+        self.subagents = sub_name_and_output_list
 
-    def invoke(self, state: BaseModel, config: RunnableConfig):
+
+    def switcher(self, state: State) -> str:
+        # If the decision was not to proceed yet, end
+        if state['to_proceed'] == False:
+            return END
+        # Basic, increment one up
+        for agent_name, output in state['agents'].items():
+            if output.status != 'FINISHED':
+                return agent_name
+        return END
+            
+    def init_state(self, state: State) -> dict | State:
+        if not state['agents']:
+            return {
+                'agents': {name: output_format() for name, _, output_format in self.subagents},
+                'to_proceed': False
+            }
+        return state
+
+    def invoke(self, state: State, config: RunnableConfig):
+        if state['to_proceed'] == True:
+            return state
         answer = self.agent.invoke({'messages': state['messages']}, config)
-        conclusion = answer['structured_response'].conclusion
-        messages = AIMessage(content=answer['structured_response'].message)
-        return {'agents': {self.agent.name: conclusion}, 'messages': messages}
+        structured_answer: StartTest = answer['structured_response']
+        new_state = state.copy()
+        new_state['to_proceed'] = structured_answer.patient_test_readiness
+        new_state['messages'] = AIMessage(content=structured_answer.message)
+        return new_state

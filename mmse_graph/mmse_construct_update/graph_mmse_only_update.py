@@ -6,10 +6,10 @@ import os
 import logging
 
 # Add State dependencies
-from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 
 # Add Basic agent
+from .mmse_intake_agent import IntakeAgent
 from .mmse_basic_agent import BasicAgent, Conclusion
 
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -19,16 +19,15 @@ from langchain.agents import create_agent
 from langchain.agents.middleware import ToolRetryMiddleware
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph, START
-from langchain.messages import AnyMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 
 import sys 
-from typing import Annotated
-from typing_extensions import TypedDict
 
+
+from .state_definition import State
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -108,52 +107,6 @@ def get_agents_with_types_and_schema() -> list:
     ]
     return agents
 
-def switcher(state: State) -> str:
-    # Basic, increment one up
-    for agent_name, output in state['agents'].items():
-        if output.status != 'FINISHED':
-            return agent_name
-    return END
-
-def merge_agents(left: dict, right: dict) -> dict:
-    return {**left, **right}
-
-class State(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-    agents: Annotated[dict, merge_agents]
-
-class InitAgent:
-    def __init__(self) -> None:
-        self.name = "init"
-    def init_agents(self, state: State) -> dict:
-        if not state['agents']:
-            return {
-                'agents': {name: output_format() for name, _, output_format in get_agents_with_types_and_schema()}
-            }
-        return state
-
-
-class MmseAgent:
-    def __init__(self, model, prompts, callbacks= None):
-        self.agent = create_agent(
-            model=model, 
-            tools=[], 
-            system_prompt=prompts,
-            middleware=[ToolRetryMiddleware()]) # AgentMiddleware() to add later
-        self.callbacks = callbacks
-
-    def _set_callbacks_if_needed(self, config: RunnableConfig):
-        if self.callbacks:
-            logging.info("Added langfuse callback in graph!")
-            config['callbacks'] = self.callbacks
-        
-    async def ainvoke(self, state: State, config: RunnableConfig):
-        self._set_callbacks_if_needed(config)
-        return self.agent.ainvoke(state, config)
-    
-    def invoke(self, state: State, config: RunnableConfig):
-        self._set_callbacks_if_needed(config)
-        return self.agent.invoke(state, config)
 
 def create_mmse_graph():
     """Create and return a fresh instance of the intake graph"""
@@ -176,18 +129,17 @@ def create_mmse_graph():
     # Create a fresh StateGraph builder
     builder = StateGraph(State)
     
-    # Define nodes: these do the work
-    init = InitAgent()
-    builder.add_node(init.name, init.init_agents)
-    builder.add_edge(START, init.name)
-    #switch_table = {}
+    # FROM intake to sub agents
+    intakeAgent = IntakeAgent(assistant_llm, sub_name_and_output_list=get_agents_with_types_and_schema())
+    builder.add_node(intakeAgent.state_name, intakeAgent.init_state)
+    builder.add_edge(START, intakeAgent.state_name)
+    builder.add_node(intakeAgent.name, intakeAgent.invoke)
+    builder.add_edge(intakeAgent.state_name, intakeAgent.name)
+    builder.add_conditional_edges(intakeAgent.name, intakeAgent.switcher)
+    # Add subagents
     for name, agent_type, output_format in get_agents_with_types_and_schema():
         builder.add_node(name, agent_type(name, assistant_llm, [], State).invoke)
-        #switch_table[name] = name
-    #builder.add_conditional_edges(init.name, switcher, switch_table)
-    builder.add_conditional_edges(init.name, switcher)
-    #builder.add_node("start_node", MmseAgent(assistant_llm, "Be nice").invoke)
-    #builder.add_edge(START, "start_node")
+
     graph = builder.compile(checkpointer=InMemorySaver())
 
     logging.info("Graph built successfully")

@@ -9,6 +9,7 @@ import logging
 from .state_definition import State
 from .mmse_intake_agent import IntakeAgent
 from .mmse_basic_agent import BasicAgent, Conclusion
+from .drawing_agent import DrawingTester
 
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_neo4j import Neo4jSaver
@@ -19,9 +20,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 
-import sys 
-
-
+import sys
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,21 +32,40 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 env_var_file = "vars.local.env"
 
+
 def load_env_variables():
     """Load environment variables from vars.env file and return configuration"""
     #########################
     ### get env variables ###
     #########################
-    load_dotenv(env_var_file, override=True)  # This line brings all environment variables from vars.env into os.environ
+    load_dotenv(
+        env_var_file, override=True
+    )  # This line brings all environment variables from vars.env into os.environ
 
-    assert os.environ['NVIDIA_API_KEY'] is not None, "Make sure you have your NVIDIA_API_KEY exported as a environment variable!"
+    assert os.environ["NVIDIA_API_KEY"] is not None, (
+        "Make sure you have your NVIDIA_API_KEY exported as a environment variable!"
+    )
     nvidia_api_key = os.getenv("NVIDIA_API_KEY", None)
 
-    assert os.environ['AGENT_LLM_MODEL'] is not None, "Make sure you have your AGENT_LLM_MODEL exported as a environment variable!"
+    assert os.environ["AGENT_LLM_MODEL"] is not None, (
+        "Make sure you have your AGENT_LLM_MODEL exported as a environment variable!"
+    )
     llm_model = os.getenv("AGENT_LLM_MODEL", None)
 
-    assert os.environ['AGENT_LLM_BASE_URL'] is not None, "Make sure you have your AGENT_LLM_BASE_URL exported as a environment variable!"
+    assert os.environ["AGENT_LLM_BASE_URL"] is not None, (
+        "Make sure you have your AGENT_LLM_BASE_URL exported as a environment variable!"
+    )
     base_url = os.getenv("AGENT_LLM_BASE_URL", None)
+
+    assert os.environ["AGENT_MULTI_BASE_URL"] is not None, (
+        "Make sure you have your AGENT_MULTI_BASE_URL exported as a environment variable!"
+    )
+    modal_base_url = os.getenv("AGENT_MULTI_BASE_URL", None)
+
+    assert os.environ["AGENT_MULTI_MODEL"] is not None, (
+        "Make sure you have your AGENT_MULTI_MODEL exported as a environment variable!"
+    )
+    modal_llm_model = os.getenv("AGENT_MULTI_MODEL", None)
 
     nemo_guardrails_config_path = os.getenv("NEMO_GUARDRAILS_CONFIG_PATH", None)
 
@@ -64,34 +82,39 @@ def load_env_variables():
     neo4j_password = os.getenv("NEO4J_PASSWORD", "").strip()
 
     return {
-        'nvidia_api_key': nvidia_api_key,
-        'llm_model': llm_model,
-        'base_url': base_url,
-        'nemo_guardrails_config_path': nemo_guardrails_config_path,
-        'langfuse_public_key': langfuse_public_key,
-        'langfuse_secret_key': langfuse_secret_key,
-        'langfuse_base_url': langfuse_base_url,
-        'langfuse_prompt_name': langfuse_prompt_name,
-        'langfuse_prompt_label': langfuse_prompt_label,
-        'neo4j_uri': neo4j_uri,
-        'neo4j_username': neo4j_username,
-        'neo4j_password': neo4j_password,
+        "nvidia_api_key": nvidia_api_key,
+        "llm_model": llm_model,
+        "base_url": base_url,
+        "modal_llm_model": modal_llm_model,
+        "modal_base_url": modal_base_url,
+        "nemo_guardrails_config_path": nemo_guardrails_config_path,
+        "langfuse_public_key": langfuse_public_key,
+        "langfuse_secret_key": langfuse_secret_key,
+        "langfuse_base_url": langfuse_base_url,
+        "langfuse_prompt_name": langfuse_prompt_name,
+        "langfuse_prompt_label": langfuse_prompt_label,
+        "neo4j_uri": neo4j_uri,
+        "neo4j_username": neo4j_username,
+        "neo4j_password": neo4j_password,
     }
 
 
 def get_agents_with_types_and_schema() -> list:
+    # agents = [
+    #     ('orientation_time', BasicAgent, Conclusion),
+    #     ('orientation_place', BasicAgent, Conclusion),
+    #     ('registration', BasicAgent, Conclusion),
+    #     ('attention_calculation', BasicAgent, Conclusion),
+    #     ('recall', BasicAgent, Conclusion),
+    #     ('naming', BasicAgent, Conclusion),
+    #     ('repetition', BasicAgent, Conclusion),
+    #     ('three_stage_command', BasicAgent, Conclusion),
+    #     ('reading', BasicAgent, Conclusion),
+    #     ('writing', BasicAgent, Conclusion),
+    #     ('drawing', BasicAgent, Conclusion),
+    # ]
     agents = [
-        ('orientation_time', BasicAgent, Conclusion),
-        ('orientation_place', BasicAgent, Conclusion),
-        ('registration', BasicAgent, Conclusion),
-        ('attention_calculation', BasicAgent, Conclusion),
-        ('recall', BasicAgent, Conclusion),
-        ('naming', BasicAgent, Conclusion),
-        ('repetition', BasicAgent, Conclusion),
-        ('three_stage_command', BasicAgent, Conclusion),
-        ('reading', BasicAgent, Conclusion),
-        ('writing', BasicAgent, Conclusion),
-        ('drawing', BasicAgent, Conclusion),
+        ("drawing", DrawingTester, Conclusion, 1),
     ]
     return agents
 
@@ -100,29 +123,36 @@ def create_mmse_graph():
     """Create and return a fresh instance of the intake graph"""
     # Reload environment variables from vars.env
     env_config = load_env_variables()
-    
+
     # Create fresh LLM instance with reloaded config
     assistant_llm = ChatNVIDIA(
-        model=env_config['llm_model'], 
-        base_url=env_config['base_url']
+        model=env_config["llm_model"], base_url=env_config["base_url"]
     )
-    # Open a langfuse connection
-    langfuse = get_client()
-    langfuse_handler = CallbackHandler()
+    modal_assistant_llm = ChatNVIDIA(
+        model=env_config["modal_llm_model"], base_url=env_config["modal_base_url"]
+    )
+    llm_list = [assistant_llm, modal_assistant_llm]
 
     # Create a fresh StateGraph builder
     builder = StateGraph(State)
-    
+
     # FROM intake to sub agents
-    intakeAgent = IntakeAgent(assistant_llm, sub_name_and_output_list=get_agents_with_types_and_schema(), tracer=[langfuse_handler])
+    intakeAgent = IntakeAgent(
+        assistant_llm, sub_name_and_output_list=get_agents_with_types_and_schema()
+    )
     builder.add_node(intakeAgent.state_name, intakeAgent.init_state)
     builder.add_edge(START, intakeAgent.state_name)
     builder.add_node(intakeAgent.name, intakeAgent.invoke)
     builder.add_edge(intakeAgent.state_name, intakeAgent.name)
     builder.add_conditional_edges(intakeAgent.name, intakeAgent.switcher)
     # Add subagents
-    for name, agent_type, output_format in get_agents_with_types_and_schema():
-        builder.add_node(name, agent_type(name, assistant_llm, [], State).invoke)
+    for (
+        name,
+        agent_type,
+        output_format,
+        llm_index,
+    ) in get_agents_with_types_and_schema():
+        builder.add_node(name, agent_type(name, llm_list[llm_index], [], State).invoke)
 
     graph = builder.compile(checkpointer=InMemorySaver())
 

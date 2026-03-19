@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MMSE Drawing UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="layout">
+        <section class="panel panel--info">
+            <p class="eyebrow">MMSE Drawing Capture</p>
+            <h1>Copy the image and submit when finished.</h1>
+            <p class="status" id="status">Waiting for the agent to send a reference image.</p>
+            <div class="controls">
+                <button id="penButton" class="tool-button is-active" type="button">Pen</button>
+                <button id="eraserButton" class="tool-button" type="button">Eraser</button>
+                <label class="range-label" for="brushSize">Brush Size</label>
+                <input id="brushSize" type="range" min="4" max="36" step="1" value="8">
+                <button id="clearButton" class="tool-button" type="button">Clear</button>
+                <button id="doneButton" class="tool-button tool-button--primary" type="button">Done</button>
+            </div>
+        </section>
+
+        <section class="panel panel--canvas">
+            <div class="canvas-shell" id="canvasShell">
+                <canvas id="referenceCanvas"></canvas>
+                <canvas id="drawingCanvas"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

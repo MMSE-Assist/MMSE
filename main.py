@@ -3,15 +3,25 @@ import uuid
 import streamlit as st
 import logging
 from langchain_core.messages import AIMessage, HumanMessage
-
+from langfuse import get_client
+from langfuse.langchain import CallbackHandler
 from mmse_graph.mmse_construct_update.graph_mmse_only_update import create_mmse_graph
 
 logging.basicConfig(level=logging.DEBUG)
+
 
 @st.cache_resource
 def get_graph():
     """Create the MMSE graph once and reuse it across all sessions."""
     return create_mmse_graph()
+
+
+@st.cache_resource
+def get_langfuse():
+    """setup langfuse"""
+    langfuse = get_client()
+    langfuse_handler = CallbackHandler()
+    return (langfuse, langfuse_handler)
 
 
 def main():
@@ -37,7 +47,11 @@ def main():
         st.session_state.messages.append({"role": "user", "content": prompt})
 
         graph = get_graph()
-        config = {"configurable": {"thread_id": st.session_state.thread_id}}
+        _, callback = get_langfuse()
+        config = {
+            "configurable": {"thread_id": st.session_state.thread_id},
+            "callbacks": [callback],
+        }
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking…"):
@@ -48,12 +62,15 @@ def main():
 
             # The last message in the returned state is the assistant reply
             ai_messages = [m for m in result["messages"] if isinstance(m, AIMessage)]
-            response_text = ai_messages[-1].content if ai_messages else "*(no response)*"
+            response_text = (
+                ai_messages[-1].content if ai_messages else "*(no response)*"
+            )
             st.markdown(response_text)
 
-        st.session_state.messages.append({"role": "assistant", "content": response_text})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": response_text}
+        )
 
 
 if __name__ == "__main__":
     main()
-

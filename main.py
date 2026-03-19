@@ -3,6 +3,7 @@ import uuid
 import streamlit as st
 import logging
 from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langfuse import get_client
 from langfuse.langchain import CallbackHandler
 from mmse_graph.mmse_construct_update.graph_mmse_only_update import create_mmse_graph
@@ -22,6 +23,20 @@ def get_langfuse():
     langfuse = get_client()
     langfuse_handler = CallbackHandler()
     return (langfuse, langfuse_handler)
+
+
+def get_latest_assistant_text(messages: list) -> str:
+    """Return the last visible assistant reply from graph state messages."""
+    visible_ai_messages = [
+        message
+        for message in messages
+        if isinstance(message, AIMessage)
+        and bool(message.content)
+        and not getattr(message, "tool_calls", None)
+    ]
+    if not visible_ai_messages:
+        return "*(no response)*"
+    return str(visible_ai_messages[-1].content)
 
 
 def main():
@@ -48,7 +63,7 @@ def main():
 
         graph = get_graph()
         _, callback = get_langfuse()
-        config = {
+        config: RunnableConfig = {
             "configurable": {"thread_id": st.session_state.thread_id},
             "callbacks": [callback],
         }
@@ -60,11 +75,7 @@ def main():
                     config=config,
                 )
 
-            # The last message in the returned state is the assistant reply
-            ai_messages = [m for m in result["messages"] if isinstance(m, AIMessage)]
-            response_text = (
-                ai_messages[-1].content if ai_messages else "*(no response)*"
-            )
+            response_text = get_latest_assistant_text(result["messages"])
             st.markdown(response_text)
 
         st.session_state.messages.append(

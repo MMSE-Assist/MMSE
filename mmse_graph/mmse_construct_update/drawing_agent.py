@@ -9,9 +9,8 @@ load_dotenv(
 
 from langchain.agents import create_agent
 from langchain.chat_models import BaseChatModel
-from langchain.messages import SystemMessage, HumanMessage, AnyMessage, AIMessage
+from langchain.messages import SystemMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
-from typing import Any, cast
 from langchain.tools import tool
 from requests import request
 from .local_system_prompt.load import load
@@ -123,32 +122,6 @@ class DrawingTester:
             middleware=[ModelRetryMiddleware(), ToolRetryMiddleware()],
             response_format=FollowUp,
         )
-
-    def _populate_human_message_with_image(self, message: AnyMessage) -> AnyMessage:
-        """Return a new HumanMessage with the user drawing appended if it exists."""
-        if not isinstance(message, HumanMessage):
-            return message
-        # Check if drawing was added
-        user_drawing: Path = Path(__file__).parent / "drawing_data" / "user_drawing.png"
-        if not user_drawing.exists():
-            return message
-
-        # Normalize existing content to list form
-        content = message.content
-        if isinstance(content, str):
-            content_parts: list[str | dict[str, Any]] = [
-                {"type": "text", "text": content}
-            ]
-        else:
-            content_parts = cast(list[str | dict[str, Any]], list(content))
-
-        content_parts.append(
-            {
-                "type": "image_url",
-                "image_url": {"url": _load_image_as_base64_url(user_drawing)},
-            }
-        )
-        return HumanMessage(content=content_parts)
 
     def invoke(self, state: State, config: RunnableConfig):
         answer = self.agent.invoke({"messages": state["messages"]}, config)

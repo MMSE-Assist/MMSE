@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from langchain.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
-from langchain.messages import AIMessage
+from langchain.messages import AIMessage, SystemMessage
 from .local_system_prompt.load import load
 
 from .state_definition import State
@@ -62,11 +62,15 @@ class IntakeAgent:
         return state
 
     def invoke(self, state: State, config: RunnableConfig):
+        # Finish
+        if all([(output.status == "FINISHED") for output in state["agents"].values()]):
+            state["to_proceed"] = False
+            state["messages"].append(SystemMessage(content="Inform the patient that the test is over, thank him, and tell him, we will see each other tomorrow"))
         if state["to_proceed"] == True:
             return state
         answer = self.agent.invoke({"messages": state["messages"]}, config)
         structured_answer: StartTest = answer["structured_response"]
-        new_state = state.copy()
-        new_state["to_proceed"] = structured_answer.patient_test_readiness
-        new_state["messages"] = AIMessage(content=structured_answer.message)
-        return new_state
+        return {
+            "to_proceed": structured_answer.patient_test_readiness,
+            "messages": [AIMessage(content=structured_answer.message)],
+        }

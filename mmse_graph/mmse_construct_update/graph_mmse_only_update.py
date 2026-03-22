@@ -80,7 +80,18 @@ def load_env_variables():
 
 
 def get_agents_with_types_and_schema() -> list:
-    agents = [
+    """Return the list of agents for Telephone MMSE (T-MMSE).
+    
+    This project implements T-MMSE (Telephone Mini-Mental State Examination),
+    a telephone-administered cognitive assessment that removes items requiring
+    visual presentation, writing, or physical manipulation:
+    - Removed: three_stage_command, reading, writing, drawing
+    - Retained: orientation_time, orientation_place, registration, 
+      attention_calculation, recall, naming, repetition
+    
+    Maximum score: 24 points (vs. 30 for standard MMSE).
+    """
+    t_mmse_agents = [
         ('orientation_time', BasicAgent, Conclusion),
         ('orientation_place', BasicAgent, Conclusion),
         ('registration', BasicAgent, Conclusion),
@@ -88,12 +99,8 @@ def get_agents_with_types_and_schema() -> list:
         ('recall', BasicAgent, Conclusion),
         ('naming', BasicAgent, Conclusion),
         ('repetition', BasicAgent, Conclusion),
-        ('three_stage_command', BasicAgent, Conclusion),
-        ('reading', BasicAgent, Conclusion),
-        ('writing', BasicAgent, Conclusion),
-        ('drawing', BasicAgent, Conclusion),
     ]
-    return agents
+    return t_mmse_agents
 
 
 def create_mmse_graph():

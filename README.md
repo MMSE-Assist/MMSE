@@ -7,7 +7,7 @@ This project implements **T-MMSE exclusively** with prompts optimized for reliab
 ## Quick Start
 
 ```bash
-cd /home/aleksandrstadnikov/MMSE
+cd MMSE
 uv install
 uv venv
 uv sync

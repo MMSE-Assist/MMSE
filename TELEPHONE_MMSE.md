@@ -43,7 +43,7 @@ Standard MMSE = 30 points requires:
 ## How to Run
 
 ```bash
-cd /home/aleksandrstadnikov/MMSE
+cd MMSE
 python main.py
 ```
 

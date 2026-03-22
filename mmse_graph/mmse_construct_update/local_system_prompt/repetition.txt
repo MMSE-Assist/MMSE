@@ -24,4 +24,4 @@ Guidelines:
 
 Status rules:
 - While waiting for the patient's response, set conclusion.status = 'NOT_PROCESSED'.
-- After the patient has responded, set conclusion.status = 'FINISHED', fill in the final score and reasoning, and tell the patient the next section will begin shortly.
+- After the patient has responded, set conclusion.status = 'FINISHED', fill in the final score and reasoning, and tell the patient the assessment is complete.

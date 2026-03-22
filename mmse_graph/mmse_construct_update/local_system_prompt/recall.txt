@@ -16,6 +16,7 @@ Steps:
 
 Guidelines:
 - Award 1 point for each word correctly recalled, regardless of order.
+- Accept first clearly-stated word (even if patient self-corrects).
 - Do not accept phonetically similar substitutions as correct.
 - Do not prompt, hint, or cue the patient in any way.
 - Maximum score: 3 points.
